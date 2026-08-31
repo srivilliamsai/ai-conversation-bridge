@@ -10,6 +10,8 @@
 
 ---
 
+> **Outdated translation:** This page has not been updated for v0.2.0 (LangGraph default). See the [English version](../../README.md). The data-retention claim in this translation is outdated — English docs are authoritative; see [TRANSLATION_NEEDED.md](../TRANSLATION_NEEDED.md).
+
 AI駆動のオーケストレーションにより、企業向けメッセージングアプリ（LINE WORKS、WeChat（ウィーチャット）、Feishu（フィーシュー）など）をWorkdayに接続するリファレンスアーキテクチャです。ワーカーが日常的に使うアプリの中でAIを利用できることが求められる市場向けに設計されています。
 
 
@@ -50,7 +52,7 @@ APJを念頭に設計しましたが、自前のLLMやチャットプラット�
 | コンポーネント | 役割 | 配置場所 |
 | --- | --- | --- |
 | **Flowiseフロー** | LLMオーケストレーション、意図認識、MCPツール呼び出しを担います。 | [flowise/](../../flowise/) |
-| **チャットコネクター** | チャットプラットフォームからメッセージを受け取り、AIの応答を送り返す双方向アダプターです。 | [chat-connector/](../../chat-connector/) |
+| **チャットコネクター** | チャットプラットフォームからメッセージを受け取り、AIの応答を送り返す双方向アダプターです。 | [bridge-service/](../../bridge-service/) |
 | **デモMCPサーバー** | テストと開発用のモックWorkdayツールです。（本番ではWorkday Agent Gatewayに差し替えてください。） | [mcp-demo-server/](../../mcp-demo-server/) |
 
 
@@ -67,7 +69,7 @@ APJを念頭に設計しましたが、自前のLLMやチャットプラット�
 ### 1. リポジトリをクローンする
 
 ```bash
-git clone https://github.com/your-org/ai-conversation-bridge.git
+git clone https://github.com/Workday/ai-conversation-bridge.git
 cd ai-conversation-bridge
 ```
 
@@ -93,18 +95,19 @@ gcloud run deploy mcp-demo-server \
 ### 4. チャットコネクターをデプロイする
 
 ```bash
-gcloud run deploy chat-connector \
-  --source chat-connector
+gcloud run deploy bridge-service \
+  --source bridge-service
 ```
 
-> **重要：** デプロイ後、Cloud Runコンソールで環境変数を設定することを忘れないでください！AIプロバイダー（`AI_PROVIDER`や`FLOWISE_API_URL`など）と、各チャットチャネルの設定が必要です。変数の一覧は`chat-connector/.env.example`を参照してください。
+> **重要：** デプロイ後、Cloud Runコンソールで環境変数を設定することを忘れないでください！AIプロバイダー（`AI_PROVIDER`や`FLOWISE_API_URL`など）と、各チャットチャネルの設定が必要です。変数の一覧は`bridge-service/.env.example`を参照してください。
 
 ### 5. チャットチャネルを接続する
 
 チャットプラットフォームのコールバックURLを、チャネル固有のエンドポイントに設定します。
 
-- LINE WORKS：`https://chat-connector-abc123.us-west1.run.app/lineworks/callback`
-- DingTalk HTTPロボット：`https://chat-connector-abc123.us-west1.run.app/dingtalk/callback`
+- LINE WORKS：`https://bridge-service-abc123.us-west1.run.app/lineworks/callback`
+- DingTalk HTTPロボット：`https://bridge-service-abc123.us-west1.run.app/dingtalk/callback`
+- Feishu（フィーシュー）：`https://bridge-service-abc123.us-west1.run.app/feishu/callback`
 
 レガシーの`/callback`パスは、既存デプロイ向けのLINE WORKSエイリアスとして引き続き受け付けられます。
 
@@ -145,7 +148,7 @@ gcloud run deploy chat-connector \
 
 ```text
 ai-conversation-bridge/
-+-- chat-connector/          # Webhookアダプター（Flask、Python）
++-- bridge-service/          # Webhookアダプター（Flask、Python）
 |   +-- app/services/        # メッセージングアダプター（LINE WORKS、DingTalk）+ AIクライアント
 |   +-- Dockerfile
 |   +-- .env.example

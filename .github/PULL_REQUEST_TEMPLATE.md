@@ -2,8 +2,9 @@
 Brief description of the changes.
 
 ## Component(s) Changed
-- [ ] Chat Connector
-- [ ] Flowise Flow
+- [ ] Bridge service
+- [ ] LangGraph orchestrator
+- [ ] Deprecated Flowise flow
 - [ ] Demo MCP Server
 - [ ] Documentation
 - [ ] CI/CD

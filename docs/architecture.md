@@ -10,9 +10,11 @@
 
 ---
 
+> **Flowise sunset:** [Flowise](https://flowiseai.com/sunset) EOL date **31 August 2026**. This repo defaults to bundled **LangGraph** (`ORCHESTRATOR=langgraph`). `ORCHESTRATOR=flowise` remains in v0.2.0 as a deprecated opt-in if you self-host from the [archived Flowise repository](https://github.com/FlowiseAI/Flowise). Do not start new Flowise integrations here.
+
 ## Overview
 <p align="center">
-   <img width="900" height="490" alt="high level architecture" src="https://github.com/user-attachments/assets/cdd3bcc0-ece8-48ab-9631-0006513cb5a8" />
+   <img width="900" alt="AI Conversation Bridge architecture overview" src="assets/architecture.png" />
 </p>
 
 The AI Conversation Bridge is a reference architecture for connecting enterprise messaging platforms to Workday through AI-powered orchestration. It addresses four key challenges in the APJ region:
@@ -26,7 +28,7 @@ The AI Conversation Bridge is a reference architecture for connecting enterprise
 
 ### What this repo is
 
-- A reference implementation of the bridge pattern: chat adapter -> Flowise orchestration -> MCP tools -> Workday system of action.
+- A reference implementation of the bridge pattern: chat adapters → bundled LangGraph orchestrator → MCP tools → Workday system of action.
 - A development and demo environment with a mock MCP server so teams can prototype flows safely.
 - A starting point for customers and partners to build production deployments in their own environments.
 
@@ -34,85 +36,75 @@ The AI Conversation Bridge is a reference architecture for connecting enterprise
 
 - Not a production-ready Workday MCP endpoint or substitute for Workday Agent Gateway.
 - Not a complete multi-platform adapter pack in a single release.
-- Not a managed runtime for Flowise or LLM hosting.
+- Not a managed runtime for LLM hosting.
 
 ## System Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                          AI CONVERSATION BRIDGE                              │
-│                                                                              │
-│  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌───────────┐   │
-│  │ Chat Platform  │  │     Chat       │  │    Flowise     │  │    MCP    │   │
-│  │  (External)    │─▶│   Connector    │─▶│  (The Core)    │─▶│  Server   │   │
-│  │                │◀─│                │◀─│                │◀─│ (Workday) │   │
-│  └────────────────┘  └────────────────┘  └────────────────┘  └───────────┘   │
-│                                                                              │
-│  LINE WORKS          Webhook adapter     LLM orchestration    Tool execution │
-│  DingTalk            Message routing     Intent recognition   Workday APIs   │
-│  WeChat/KakaoTalk    Response delivery   Jargon translation   Mock data(dev) │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
+The diagram above is the canonical view. At a high level:
+
+**Chat platforms** (LINE WORKS, DingTalk, Feishu, …) → **bridge service** (webhook adapters + bundled LangGraph, one process) → **MCP** (demo server or Workday Agent Gateway) → **Workday**.
+
+LangGraph is not a separate deployable box — it runs inside [`bridge-service/`](../bridge-service/) with the channel adapters. Outbound LLM calls go to your configured Chat Completions provider (see the diagram's LLM providers arm).
 
 ## Component Details
 
-### Chat Connector (`chat-connector/`)
+### Conversation Bridge Service (`bridge-service/`)
 
-A thin, stateless Flask application that:
+A Flask application that:
 
-- Receives webhooks from messaging platforms
-- Extracts the user's message and identity
-- Forwards the message to Flowise
+- Receives webhooks from messaging platforms (channel adapters)
+- Invokes the selected orchestrator (`ORCHESTRATOR`: LangGraph by default, or Direct LLM / deprecated Flowise)
 - Sends the AI response back to the user
 
-The connector has **no business logic** — it's purely an adapter. Adding a new chat platform means adding a new service file and route, not changing the AI pipeline. Multiple channel connectors can be active in the same deployment; for example, LINE WORKS and DingTalk can both feed the shared Flowise/OpenRouter backend at the same time.
+Channel adapters stay thin. LangGraph runs in-process inside this service. Multiple channels can be active in the same deployment.
 
-Because it receives webhooks from external messaging platforms, the chat connector **must be deployed to a public-facing environment** with an HTTPS endpoint. Google Cloud Run is the reference example, but any container platform that provides a public URL works (AWS App Runner, Azure Container Apps, Alibaba Cloud Elastic Container Instance, Tencent Kubernetes Engine, etc.).
+Because it receives webhooks from external messaging platforms, the bridge service **must be deployed to a public-facing environment** with an HTTPS endpoint. Google Cloud Run is the reference example, but any container platform that provides a public URL works (AWS App Runner, Azure Container Apps, Alibaba Cloud Elastic Container Instance, Tencent Kubernetes Engine, etc.).
 
-**Runtime:** Python / Gunicorn / Cloud Run (or equivalent public-facing container platform)
+**Runtime:** Python / Gunicorn (1 worker, 8 threads) / Cloud Run (or equivalent). LangGraph has been exercised on Cloud Run at 256Mi; leave memory at the platform default unless you hit OOM.
 
-### Flowise (`flowise/`)
+### LangGraph (bundled, default)
 
-The actual "bridge" — a Flowise flow that:
+When `ORCHESTRATOR=langgraph` (the default), the bridge service compiles a reference ReAct graph at startup, calls the LLM through the **OpenAI Chat Completions** API (`ChatOpenAI` at `LLM_BASE_URL`, typically `POST …/v1/chat/completions`), discovers MCP tools from `MCP_SERVER_URL`, filters them through the built-in **reference allowlist** (or `MCP_TOOL_ALLOWLIST` when configured), and keeps conversation state in an in-memory checkpointer (`STATE_BACKEND=memory`). The reference allowlist includes mock read tools and `request_my_time_off` — it is not a security boundary. The OpenAI Responses API and native Anthropic Messages are not used. Discovery, missing allowlist names, or zero usable tools fail process startup. Pin to a single Cloud Run instance for the reference deploy.
 
-- Receives messages from the chat connector
-- Processes them through a customer-chosen LLM
-- Recognizes intent and translates jargon
-- Calls Workday tools via MCP
-- Returns formatted responses
+### Direct LLM (`ORCHESTRATOR=direct_llm`)
 
-Flowise is managed by the customer in their own cloud environment. This project provides flow templates, not a Flowise runtime. If self-hosting Flowise, it must be deployed to **public-facing infrastructure** so that the chat connector can reach its prediction API.
+Optional smoke-test path: the bridge calls the Chat Completions API directly with no MCP tools. Use it to verify webhooks and LLM connectivity before wiring MCP. Does not discover tools or enforce an allowlist.
 
-**Runtime:** Customer-managed Flowise instance (cloud or self-hosted on public-facing infrastructure)
+### Flowise (`flowise/`, deprecated)
+
+When `ORCHESTRATOR=flowise`, the bridge service forwards messages to a customer-hosted Flowise prediction API. Flowise EOL date: 31 August 2026; this path is retained for one release only. Fork the [archived Flowise repository](https://github.com/FlowiseAI/Flowise) if you must continue self-hosting.
 
 ### MCP Server (`mcp-demo-server/`)
 
-This project includes a demo MCP server with mock Workday tools and sample data for development and testing. Like the chat connector, the demo server should be **deployed to a cloud environment** (e.g., Google Cloud Run, Alibaba Cloud Elastic Container Instance, Tencent Kubernetes Engine) so that Flowise can reach it. Any container platform with a public URL works.
+This project includes a demo MCP server with **mock** Workday tools and sample data for development and testing. Deploy it to a cloud environment so the bridge service can reach it at `MCP_SERVER_URL` (include the `/mcp` path).
 
-The demo server has **no authentication** and is not suitable for production use. In production, replace it with **Workday's official MCP endpoints** via Agent Gateway, which provides enterprise-grade security (OAuth 2.1, mTLS, audit logging, network policies). Update the MCP URL in your Flowise flow to point to the Agent Gateway URL instead.
+The demo server has **no authentication** and is not suitable for production use. In production, replace it with **Workday's official MCP endpoints** via Agent Gateway, which provides enterprise-grade security (OAuth 2.1, mTLS, audit logging, network policies). Moving to production is not URL-only — plan for tool discovery, auth, identity mapping, and allowlist updates. Set `MCP_SERVER_URL` on the bridge to the production endpoint.
 
 **Runtime:** Python / FastMCP / Cloud Run (demo) or Workday Agent Gateway (prod)
 
 ## Request Flow
 
 ```
-1. User sends "How many vacation days do I have?" in LINE WORKS or DingTalk
+1. User sends "How many vacation days do I have?" in LINE WORKS, DingTalk, or Feishu
    │
-2. Chat platform POSTs webhook to Chat Connector
+2. Chat platform POSTs webhook to bridge service
    - LINE WORKS: /lineworks/callback (or legacy /callback)
    - DingTalk: /dingtalk/callback
+   - Feishu: /feishu/callback
    │
-3. Chat Connector extracts message + platform-scoped session id, calls Flowise prediction API
+3. bridge service extracts message + platform-scoped session id, claims a
+   delivery key so platform retries skip a second orchestrator call, invokes
+   the LangGraph orchestrator (default)
    │
-4. Flowise LLM recognizes intent: get_current_user_time_off_balance
+4. LangGraph LLM recognizes intent: get_current_user_time_off_balance
    │
-5. Flowise MCP client calls MCP server → get_current_user_time_off_balance()
+5. LangGraph MCP client calls MCP server → get_current_user_time_off_balance()
    │
-6. MCP server returns: { vacation: { available: 12, used: 3 } }
+6. MCP server returns mock data: { vacation: { available: 12, used: 3 } }
    │
-7. Flowise LLM formats response: "You have 12 vacation days remaining (3 used of 15 total)"
+7. LangGraph LLM formats response: "You have 12 vacation days remaining (3 used of 15 total)"
    │
-8. Chat Connector receives response, sends it back through the original chat platform
+8. bridge service receives response, sends it back through the original chat platform
 ```
 
 ## Key Design Principles
@@ -121,16 +113,16 @@ The demo server has **no authentication** and is not suitable for production use
 
 - **Workday** stays the secure "system of action" via MCP
 - **Customer** controls the AI layer (their own LLM) and messaging/UI
-- **The Bridge** (Flowise) connects the two without storing sensitive data
+- **The Bridge** connects chat platforms to the LangGraph orchestrator. With `STATE_BACKEND=memory`, the bridge checkpointer retains conversation history (including tool results that may contain HR data) in process memory for the life of the instance — plan retention and erasure accordingly (see [Enterprise Hardening Guide](enterprise-guide.md)).
 
 ### Data Sovereignty
 
-The customer's LLM runs in their own environment. Messages are processed through their infrastructure. The Bridge respects regulatory requirements by design.
+The customer's LLM runs in their own environment when they self-host the bridge and point `LLM_BASE_URL` at a provider in their control. **Default unset `LLM_BASE_URL` / `LLM_MODEL` send traffic to OpenRouter** (`openrouter/free`) — treat that as a demo default, not a residency guarantee. Where the bridge holds conversation state (LangGraph + in-memory checkpointer), that state is subject to the same residency and retention controls as the rest of the customer's deployment.
 
 ### Platform Agnostic
 
-The chat connector pattern is repeatable for any messaging platform. The Flowise flow doesn't need platform-specific webhook or reply logic; the connector passes a platform-scoped session id such as `lineworks:<userId>` or `dingtalk:<conversationId>:<senderStaffId>` so simultaneous chat channels do not collide in conversation memory.
+The bridge service pattern is repeatable for any messaging platform. Orchestrators do not need platform-specific webhook or reply logic; the bridge passes a platform-scoped session id such as `lineworks:<userId>`, `dingtalk:<conversationId>:<senderStaffId>`, or `feishu:<chat_id>:<sender_id>` so simultaneous chat channels do not collide in conversation memory.
 
 ### Production Hardening
 
-This reference architecture implements baseline security (webhook signature verification, input limits, response validation). For production deployments, see the [Enterprise Hardening Guide](enterprise-guide.md) for additional recommendations on rate limiting, PII handling, retry logic, identity mapping, observability, and infrastructure choices (official Workday MCP servers, Flowise Cloud Enterprise).
+This reference architecture implements baseline security (webhook signature verification where configured, input limits, response validation). **Channel security varies:** LINE WORKS rejects callbacks when `LW_API_20_BOT_SECRET` is unset and verifies signatures when it is set; DingTalk in this repo filters by `DINGTALK_ALLOWED_USERS` only (no inbound signature verification); Feishu verifies the event token. For production deployments, see the [Enterprise Hardening Guide](enterprise-guide.md) for additional recommendations on rate limiting, PII handling, retry logic, identity mapping, observability, and infrastructure choices (official Workday MCP servers).

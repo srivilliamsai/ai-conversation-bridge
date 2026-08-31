@@ -10,9 +10,11 @@
 
 ---
 
+> **Outdated translation:** This page has not been updated for v0.2.0. See the [English version](../../../docs/architecture.md). The data-retention claim in this translation is outdated — English docs are authoritative; see [TRANSLATION_NEEDED.md](../../TRANSLATION_NEEDED.md).
+
 ## 概要
 <p align="center">
-   <img width="900" height="490" alt="全体アーキテクチャ" src="https://github.com/user-attachments/assets/cdd3bcc0-ece8-48ab-9631-0006513cb5a8" />
+   <img width="900" alt="全体アーキテクチャ" src="../../../docs/assets/architecture.png" />
 </p>
 
 AI Conversation Bridgeは、AI駆動のオーケストレーションを通じて企業向けメッセージングプラットフォームをWorkdayに接続するリファレンスアーキテクチャです。アジア太平洋および日本（APJ）地域における次の四つの重要な課題に対応します。
@@ -68,7 +70,7 @@ AI Conversation Bridgeは、AI駆動のオーケストレーションを通じ�
 
 ## コンポーネント詳細
 
-### チャットコネクター（`chat-connector/`）
+### チャットコネクター（`bridge-service/`）
 
 次を担う、軽量でステートレスなFlaskアプリケーションです。
 
@@ -113,6 +115,7 @@ Flowiseは、お客様自身のクラウド環境で管理します。本プロ�
 2. チャットプラットフォームがWebhookをチャットコネクターにPOSTする
    - LINE WORKS: /lineworks/callback（またはレガシー /callback）
    - DingTalk: /dingtalk/callback
+   - Feishu: /feishu/callback
    │
 3. チャットコネクターがメッセージ + プラットフォーム単位のセッションIDを抽出し、Flowise予測APIを呼び出す
    │

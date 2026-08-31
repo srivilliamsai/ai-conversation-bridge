@@ -10,9 +10,11 @@
 
 ---
 
+> **Outdated translation:** This page has not been updated for v0.2.0. See the [English version](../../../docs/architecture.md). The data-retention claim in this translation is outdated — English docs are authoritative; see [TRANSLATION_NEEDED.md](../../TRANSLATION_NEEDED.md).
+
 ## 概述
 <p align="center">
-   <img width="900" height="490" alt="高層架構" src="https://github.com/user-attachments/assets/cdd3bcc0-ece8-48ab-9631-0006513cb5a8" />
+   <img width="900" alt="高層架構" src="../../../docs/assets/architecture.png" />
 </p>
 
 AI Conversation Bridge 是一套參考架構，透過由 AI 驅動的編排能力，將企業訊息平台連接到 Workday。它針對亞太及日本（APJ）地區的四項關鍵挑戰：
@@ -68,7 +70,7 @@ AI Conversation Bridge 是一套參考架構，透過由 AI 驅動的編排能�
 
 ## 元件詳解
 
-### 聊天連接器（`chat-connector/`）
+### 聊天連接器（`bridge-service/`）
 
 一個輕量、無狀態的 Flask 應用，負責：
 
@@ -113,6 +115,7 @@ Flowise 由客戶在自有雲端環境中管理。本專案提供流程範本，
 2. 聊天平台將 Webhook POST 到聊天連接器
    - LINE WORKS：/lineworks/callback（或舊版 /callback）
    - DingTalk：/dingtalk/callback
+   - Feishu：/feishu/callback
    │
 3. 聊天連接器擷取訊息 + 依平台隔離的工作階段 ID，呼叫 Flowise 預測 API
    │

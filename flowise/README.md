@@ -10,7 +10,9 @@
 
 ---
 
-This folder contains exportable Flowise flow templates that form the **core orchestration layer** of the AI Conversation Bridge. The Flowise flow is the actual "bridge" — it connects LLMs, handles intent recognition, and calls Workday tools via MCP.
+> **Deprecated:** [Flowise](https://flowiseai.com/sunset) EOL date **31 August 2026**. These templates remain for `ORCHESTRATOR=flowise` compatibility only. New work should use bundled LangGraph in `bridge-service/`. To continue with Flowise itself, fork the [archived repository](https://github.com/FlowiseAI/Flowise).
+
+This folder contains exportable Flowise flow templates retained for the deprecated `ORCHESTRATOR=flowise` path.
 
 ## Prerequisites
 
@@ -33,10 +35,17 @@ An Agent Flow that acts as a **Workday Intelligent Assistant** — it receives n
 
 **Agent configuration:**
 
-- **Model:** OpenRouter (`z-ai/glm-4.5-air:free`) — Z.ai GLM, a free-tier Chinese model suitable for demos. Replace with any OpenRouter-supported model or switch to Qwen/DeepSeek/OpenAI/Anthropic/Gemini/etc.
+- **Model:** OpenRouter (`openrouter/free`) — OpenRouter's free model router, suitable for demos. Replace with any OpenRouter-supported model or switch to Qwen/DeepSeek/OpenAI/Anthropic/Gemini/etc.
 - **Temperature:** 0.2 (low, for deterministic tool-calling behavior)
 - **Memory:** Window-based (last 20 messages)
 - **System prompt:** Enforces strict tool-first behavior — the agent must call MCP tools to execute actions and cannot simulate or mock responses.
+
+> **Keep in sync with LangGraph:** The same role and directives live as plain text in
+> `bridge-service/app/orchestration/langgraph/prompts.py`. When you edit the Flowise
+> `agentMessages` prompt or the MCP tool allowlist, update the LangGraph copies too
+> (and vice versa). LangGraph can narrow or explicitly override its default list with
+> `MCP_TOOL_ALLOWLIST`; leave that variable unset when the bundled list should mirror
+> this flow. LangGraph fails startup if an allowlisted name is missing from the MCP server.
 
 **Tools:**
 
@@ -71,7 +80,7 @@ After importing, you'll need to configure two things:
 
 ### 1. LLM (Agent Model)
 
-The flow defaults to **OpenRouter** with the free `z-ai/glm-4.5-air:free` model (Z.ai GLM, a China-based LLM). To use it:
+The flow defaults to **OpenRouter** with the free `openrouter/free` model router. To use it:
 - Add an OpenRouter credential in Flowise with your API key
 - Or switch the model to any other provider and add the corresponding credential. Good choices for APJ include Z.ai GLM, Qwen, and DeepSeek for China-hosted deployments, or OpenAI, Anthropic, and Gemini elsewhere.
 
