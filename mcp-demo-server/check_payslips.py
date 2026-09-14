@@ -1,0 +1,90 @@
+"""Verification checks for pay slip MCP tools.
+
+Run: python3 check_payslips.py
+"""
+
+from __future__ import annotations
+
+import sys
+import types
+from pathlib import Path
+
+# Stub FastMCP if not installed locally so test checks can run anywhere
+if "fastmcp" not in sys.modules:
+    try:
+        import fastmcp  # noqa: F401
+    except ModuleNotFoundError:
+        fastmcp_stub = types.ModuleType("fastmcp")
+
+        class MockFastMCP:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def tool(self, *args, **kwargs):
+                def decorator(fn):
+                    return fn
+
+                return decorator
+
+        setattr(fastmcp_stub, "FastMCP", MockFastMCP)
+        sys.modules["fastmcp"] = fastmcp_stub
+
+# Add mcp-demo-server to sys.path
+SERVER_DIR = Path(__file__).resolve().parent
+if str(SERVER_DIR) not in sys.path:
+    sys.path.insert(0, str(SERVER_DIR))
+
+from main import CURRENT_USER_WORKER_ID, get_current_user_payslips, get_payslip_by_worker_id  # noqa: E402
+
+
+def main() -> None:
+    print("Testing pay slip MCP tools...")
+
+    # 1. Current user all payslips
+    all_slips = get_current_user_payslips()
+    assert "payslips" in all_slips, f"Expected payslips list, got {all_slips}"
+    assert all_slips["worker_id"] == CURRENT_USER_WORKER_ID
+    assert len(all_slips["payslips"]) == 2, f"Expected 2 slips for WK001, got {len(all_slips['payslips'])}"
+    assert all_slips["payslips"][0]["currency"] == "CNY"
+    assert all_slips["payslips"][0]["gross_pay"] == 35000
+    assert all_slips["payslips"][0]["net_pay"] == 25200
+
+    # 2. Current user specific period (February 2026)
+    feb_slip = get_current_user_payslips("2026-02")
+    assert feb_slip.get("period") == "2026-02", f"Expected 2026-02, got {feb_slip}"
+    assert feb_slip.get("worker_id") == "WK001"
+    assert feb_slip.get("net_pay") == 25200
+    assert "deductions" in feb_slip
+    assert feb_slip["deductions"]["income_tax"] == 4200
+
+    # 3. Current user specific period (January 2026)
+    jan_slip = get_current_user_payslips("2026-01")
+    assert jan_slip.get("period") == "2026-01"
+    assert jan_slip.get("pay_date") == "2026-01-31"
+
+    # 4. Current user period not found
+    missing_period = get_current_user_payslips("2025-12")
+    assert "error" in missing_period, f"Expected error for 2025-12, got {missing_period}"
+
+    # 5. Worker lookup: WK003 (Tokyo - JPY)
+    wk003_slip = get_payslip_by_worker_id("WK003", "2026-02")
+    assert wk003_slip.get("worker_id") == "WK003"
+    assert wk003_slip.get("currency") == "JPY"
+    assert wk003_slip.get("gross_pay") == 650000
+    assert wk003_slip.get("net_pay") == 480025
+
+    # 6. Worker lookup: WK004 (Seoul - KRW)
+    wk004_all = get_payslip_by_worker_id("WK004")
+    assert wk004_all.get("worker_id") == "WK004"
+    assert len(wk004_all.get("payslips", [])) == 1
+    assert wk004_all["payslips"][0]["currency"] == "KRW"
+
+    # 7. Non-existent worker
+    nonexistent = get_payslip_by_worker_id("WK999")
+    assert "error" in nonexistent, f"Expected error for WK999, got {nonexistent}"
+
+    print("All pay slip MCP tool checks passed successfully!")
+
+
+if __name__ == "__main__":
+    main()
